@@ -1,0 +1,109 @@
+library(xgboost)
+library(tidyverse)
+library(summarytools)
+library(caTools)
+
+##################################Load and View Dataset
+dataset <- read.table(file = "/Users/Mango/Downloads/census-income.data", sep = ",")
+view(dfSummary(dataset))
+##################################Convert to Numeric
+dataset[] <- lapply(dataset, function(x) {
+  if(is.integer(x)) as.numeric(as.integer(x)) else x
+})
+
+sapply(dataset,class)
+##########################One Hot Encoding Factors to Numeric
+##Puts Categories in seperate binary columns
+V2Hot <- model.matrix(~V2-1,dataset)
+V5Hot <- model.matrix(~V5-1,dataset)
+V7Hot <- model.matrix(~V7-1,dataset)
+V8Hot <- model.matrix(~V8-1,dataset)
+V9Hot <- model.matrix(~V9-1,dataset)
+V10Hot <- model.matrix(~V10-1,dataset)
+V11Hot <- model.matrix(~V11-1,dataset)
+V12Hot <- model.matrix(~V12-1,dataset)
+V13Hot <- model.matrix(~V13-1,dataset)
+V14Hot <- model.matrix(~V14-1,dataset)
+V15Hot <- model.matrix(~V15-1,dataset)
+V16Hot <- model.matrix(~V16-1,dataset)
+V20Hot <- model.matrix(~V20-1,dataset)
+V21Hot <- model.matrix(~V21-1,dataset)
+V22Hot <- model.matrix(~V22-1,dataset)
+V23Hot <- model.matrix(~V23-1,dataset)
+V24Hot <- model.matrix(~V24-1,dataset)
+V26Hot <- model.matrix(~V26-1,dataset)
+V27Hot <- model.matrix(~V27-1,dataset)
+V28Hot <- model.matrix(~V28-1,dataset)
+V29Hot <- model.matrix(~V29-1,dataset)
+V30Hot <- model.matrix(~V30-1,dataset)
+V32Hot <- model.matrix(~V32-1,dataset)
+V33Hot <- model.matrix(~V33-1,dataset)
+V34Hot <- model.matrix(~V34-1,dataset)
+V35Hot <- model.matrix(~V35-1,dataset)
+V36Hot <- model.matrix(~V36-1,dataset)
+V38Hot <- model.matrix(~V38-1,dataset)
+
+IncomeHot <- cbind(V2Hot, V5Hot, V7Hot, V8Hot, V9Hot, V10Hot, V11Hot,
+                   V12Hot, V13Hot, V14Hot, V15Hot, V16Hot, V20Hot, V21Hot,
+                   V22Hot, V23Hot, V24Hot, V26Hot, V27Hot, V28Hot, V29Hot, V30Hot,
+                   V32Hot, V33Hot, V34Hot, V35Hot, V36Hot, V38Hot)
+
+######Removing Variables that are no longer necessary
+rm(V2Hot, V5Hot, V7Hot, V8Hot, V9Hot, V10Hot, V11Hot,V12Hot, V13Hot, V14Hot, 
+   V15Hot, V16Hot, V20Hot, V21Hot,V22Hot, V23Hot, V24Hot, V26Hot, V27Hot, V28Hot, V29Hot, V30Hot,
+   V32Hot, V33Hot, V34Hot, V35Hot, V36Hot, V38Hot)
+####################################################################
+############################Set Up Response Variable
+V42A<- as.integer(dataset$V42)
+V42B <-ifelse(V42A==2, 1,0)
+#################################################################### 
+IncomeNumeric <- dataset[-c(2,5,7,8,9,10,11,12,13,14,15,16,20,21,22,23,24,26,27,28,29,30,32,33,34,35,36,38,42)]
+ModelDataSet <- cbind(V42B,IncomeNumeric, IncomeHot)
+
+# Splitting the dataset into the Training set and Test set
+##################################################################
+set.seed(123)
+split = sample.split(ModelDataSet, SplitRatio = 0.7)
+subset_train = subset(ModelDataSet, split == TRUE)
+subset_test = subset(ModelDataSet, split == FALSE)
+
+##################################################################
+
+train_labels <- subset_train[c(1)]
+test_labels <- data.matrix(subset_test[c(1)])
+
+train_data <- subset_train[-c(1)]
+test_data <- data.matrix(subset_test[-c(1)])
+
+#XGBoost Matrix
+##################################################################
+dtrain <- xgb.DMatrix(data = as.matrix(train_data), label= as.matrix(train_labels))
+dtest <- xgb.DMatrix(data = as.matrix(test_data), label= as.matrix(test_labels))
+
+#Initial Model
+##################################################################
+Model <- xgboost(data = dtrain,, # the data
+                max.depth = 3,
+                nround = 1, # max number of boosting iterations
+                objective = "binary:logistic")  # the objective function
+
+pred <- predict(Model, dtest)
+
+err <- mean(as.numeric(pred > 0.5) != test_labels)
+print(paste("test-error=", err))
+
+#Boosted Model
+##################################################################
+model_tuned <- xgboost(data = dtrain, # the data           
+                       max.depth = 8, # the maximum depth of each decision tree
+                       nround = 100, # number of boosting rounds
+                       early_stopping_rounds = 8, # if we dont see an improvement in this many rounds, stop
+                       objective = "binary:logistic", # the objective function
+                       gamma = 0) # add a regularization term
+
+# generate predictions for our held-out testing data
+pred <- predict(model_tuned, dtest)
+
+# get & print the classification error
+err <- mean(as.numeric(pred > 0.5) != test_labels)
+print(paste("test-error=", err))
